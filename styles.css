@@ -197,4 +197,10 @@ footer {
 
   .cards {
     flex-direction: column;
+    body {
+  font-family: Arial, sans-serif;
+  color: #222;
+  line-height: 1.6;
+  background: #f0f0f0;  /* ← add this line */
+}
   }
