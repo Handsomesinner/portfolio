@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Book a Consultation</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main>
+      <a href="index.html">← Back to Home</a>
+
+      <h1>Book a Clarity Call</h1>
+      <p>Get 1-on-1 guidance on your forex journey. Book a consultation session with Oluwapamilerin.</p>
+      <p><strong>Price: ₦5,000</strong></p>
+<input type="email" id="email" placeholder="Enter your email" required />
+
+      <button onclick="payWithPaystack()">Pay Now</button>
+    </main>
+
+    <!-- Paystack script -->
+    <script src="https://js.paystack.co/v1/inline.js"></script>
+
+    <script>
+      function payWithPaystack() {
+        var handler = PaystackPop.setup({
+          key: 'pk_test_68746c64a6dce304666713422ea4357310a52244',
+          email: document.getElementById('email').value,
+          amount: 500000, // Amount is in kobo. 500000 kobo = ₦5,000
+          currency: 'NGN',
+          callback: function(response) {
+            alert('Payment successful! Reference: ' + response.reference);
+          },
+          onClose: function() {
+            alert('Payment window closed.');
+          }
+        });
+        handler.openIframe();
+      }
+    </script>
+  </body>
+</html>
