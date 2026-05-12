@@ -1,0 +1,419 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0
+// © D-HLD Checklist Indicator – ICT Multi-Timeframe Framework
+// Designed for use on the Daily chart.
+// Covers all 4 steps: Daily DOL → 4H Waiting Room → 1H Sweep → 15M MSS & Entry
+
+//@version=5
+indicator("D-HLD Checklist [ICT Multi-TF]", overlay=true,
+     max_lines_count=500, max_boxes_count=500, max_labels_count=500,
+     max_bars_back=500)
+
+// ═══════════════════════════════════════════════════════════════════
+//  INPUTS
+// ═══════════════════════════════════════════════════════════════════
+grp1 = "── Step 1 · Daily DOL ──"
+grp2 = "── Step 2 · 4H Waiting Room ──"
+grp3 = "── Step 3 · 1H Liquidity Purge ──"
+grp4 = "── Step 4 · 15M MSS & Entry ──"
+grpG = "── General ──"
+
+show_d       = input.bool(true,  "Show Daily Levels",          group=grp1)
+show_weekly  = input.bool(true,  "Show Weekly High/Low",        group=grp1)
+show_4h      = input.bool(true,  "Show 4H FVG & OB",           group=grp2)
+show_pd_zone = input.bool(true,  "Show Premium/Discount Zones", group=grp2)
+show_1h      = input.bool(true,  "Show 1H Sweep (Stop Hunt)",  group=grp3)
+show_15m     = input.bool(true,  "Show 15M MSS & Entry FVG",   group=grp4)
+show_sl      = input.bool(true,  "Show Stop Loss Level",        group=grp4)
+show_dash    = input.bool(true,  "Show Dashboard",              group=grpG)
+extend_bars  = input.int(30,    "Extend Levels (bars right)",  group=grpG, minval=5, maxval=200)
+
+// ═══════════════════════════════════════════════════════════════════
+//  MULTI-TIMEFRAME DATA
+// ═══════════════════════════════════════════════════════════════════
+
+// ── Daily ──────────────────────────────────────────────────────────
+d_high      = request.security(syminfo.tickerid, "D", high,    lookahead=barmerge.lookahead_off)
+d_low       = request.security(syminfo.tickerid, "D", low,     lookahead=barmerge.lookahead_off)
+d_open      = request.security(syminfo.tickerid, "D", open,    lookahead=barmerge.lookahead_off)
+d_close     = request.security(syminfo.tickerid, "D", close,   lookahead=barmerge.lookahead_off)
+
+prev_d_high = request.security(syminfo.tickerid, "D", high[1], lookahead=barmerge.lookahead_off)
+prev_d_low  = request.security(syminfo.tickerid, "D", low[1],  lookahead=barmerge.lookahead_off)
+prev_d_open = request.security(syminfo.tickerid, "D", open[1], lookahead=barmerge.lookahead_off)
+prev_d_close= request.security(syminfo.tickerid, "D", close[1],lookahead=barmerge.lookahead_off)
+
+// ── Weekly ─────────────────────────────────────────────────────────
+prev_w_high = request.security(syminfo.tickerid, "W", high[1], lookahead=barmerge.lookahead_off)
+prev_w_low  = request.security(syminfo.tickerid, "W", low[1],  lookahead=barmerge.lookahead_off)
+
+// ── 4-Hour ─────────────────────────────────────────────────────────
+h4_high     = request.security(syminfo.tickerid, "240", high,    lookahead=barmerge.lookahead_off)
+h4_low      = request.security(syminfo.tickerid, "240", low,     lookahead=barmerge.lookahead_off)
+h4_open     = request.security(syminfo.tickerid, "240", open,    lookahead=barmerge.lookahead_off)
+h4_close    = request.security(syminfo.tickerid, "240", close,   lookahead=barmerge.lookahead_off)
+h4_high_2   = request.security(syminfo.tickerid, "240", high[2], lookahead=barmerge.lookahead_off)
+h4_low_2    = request.security(syminfo.tickerid, "240", low[2],  lookahead=barmerge.lookahead_off)
+h4_high_1   = request.security(syminfo.tickerid, "240", high[1], lookahead=barmerge.lookahead_off)
+h4_low_1    = request.security(syminfo.tickerid, "240", low[1],  lookahead=barmerge.lookahead_off)
+h4_open_1   = request.security(syminfo.tickerid, "240", open[1], lookahead=barmerge.lookahead_off)
+h4_close_1  = request.security(syminfo.tickerid, "240", close[1],lookahead=barmerge.lookahead_off)
+
+// ── 1-Hour ─────────────────────────────────────────────────────────
+h1_high     = request.security(syminfo.tickerid, "60", high,                      lookahead=barmerge.lookahead_off)
+h1_low      = request.security(syminfo.tickerid, "60", low,                       lookahead=barmerge.lookahead_off)
+h1_close    = request.security(syminfo.tickerid, "60", close,                     lookahead=barmerge.lookahead_off)
+h1_swing_h  = request.security(syminfo.tickerid, "60", ta.highest(high, 5)[1],    lookahead=barmerge.lookahead_off)
+h1_swing_l  = request.security(syminfo.tickerid, "60", ta.lowest(low,  5)[1],     lookahead=barmerge.lookahead_off)
+
+// ── 15-Minute ──────────────────────────────────────────────────────
+m15_high    = request.security(syminfo.tickerid, "15", high,    lookahead=barmerge.lookahead_off)
+m15_low     = request.security(syminfo.tickerid, "15", low,     lookahead=barmerge.lookahead_off)
+m15_open    = request.security(syminfo.tickerid, "15", open,    lookahead=barmerge.lookahead_off)
+m15_close   = request.security(syminfo.tickerid, "15", close,   lookahead=barmerge.lookahead_off)
+m15_high_2  = request.security(syminfo.tickerid, "15", high[2], lookahead=barmerge.lookahead_off)
+m15_low_2   = request.security(syminfo.tickerid, "15", low[2],  lookahead=barmerge.lookahead_off)
+m15_swing_h = request.security(syminfo.tickerid, "15", ta.highest(high, 3)[1], lookahead=barmerge.lookahead_off)
+m15_swing_l = request.security(syminfo.tickerid, "15", ta.lowest(low,  3)[1],  lookahead=barmerge.lookahead_off)
+
+// ═══════════════════════════════════════════════════════════════════
+//  HELPER FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════
+
+// Strong expansion: body > 60% of candle range
+strong_expansion(o, h, l, c) =>
+    rng = h - l
+    rng > 0 and math.abs(c - o) / rng > 0.60
+
+// Displacement candle: body > 55% of range (for MSS)
+is_displaced(o, h, l, c) =>
+    rng = h - l
+    rng > 0 and math.abs(c - o) / rng > 0.55
+
+// ═══════════════════════════════════════════════════════════════════
+//  STEP 1 · DAILY DOL & BIAS
+// ═══════════════════════════════════════════════════════════════════
+
+// Previous daily body expansion determines the bias
+prev_d_bull   = prev_d_close > prev_d_open
+prev_d_strong = strong_expansion(prev_d_open, prev_d_high, prev_d_low, prev_d_close)
+
+daily_bias_bull = prev_d_bull  and prev_d_strong
+daily_bias_bear = not prev_d_bull and prev_d_strong
+
+// Daily equilibrium (50% of today's daily range)
+d_eq       = (d_high + d_low) / 2
+is_premium = close > d_eq
+is_discount= close < d_eq
+
+if show_d and barstate.islast
+    // ── Previous Daily High (DOL Target)
+    line.new(bar_index - 50, prev_d_high, bar_index + extend_bars, prev_d_high,
+         color=color.new(color.yellow, 0), width=2, style=line.style_dashed)
+    label.new(bar_index + extend_bars, prev_d_high, " PDH (DOL)",
+         color=color.new(color.yellow, 10), textcolor=color.black,
+         style=label.style_label_left, size=size.small)
+
+    // ── Previous Daily Low (DOL Target)
+    line.new(bar_index - 50, prev_d_low, bar_index + extend_bars, prev_d_low,
+         color=color.new(color.yellow, 0), width=2, style=line.style_dashed)
+    label.new(bar_index + extend_bars, prev_d_low, " PDL (DOL)",
+         color=color.new(color.yellow, 10), textcolor=color.black,
+         style=label.style_label_left, size=size.small)
+
+    // ── Daily Equilibrium (50% level)
+    line.new(bar_index - 30, d_eq, bar_index + extend_bars, d_eq,
+         color=color.new(color.gray, 40), width=1, style=line.style_dotted)
+    label.new(bar_index + extend_bars, d_eq, " EQ 50%",
+         color=color.new(color.gray, 30), textcolor=color.white,
+         style=label.style_label_left, size=size.tiny)
+
+    // ── Daily Bias label
+    bias_txt = daily_bias_bull ? "▲ BULL BIAS  (Strong Daily Expansion Up)" :
+               daily_bias_bear ? "▼ BEAR BIAS  (Strong Daily Expansion Down)" :
+               "── NEUTRAL  (No Strong Expansion – Wait)"
+    bias_col = daily_bias_bull ? color.new(color.lime,  10) :
+               daily_bias_bear ? color.new(color.red,   10) :
+                                 color.new(color.gray,  20)
+    label.new(bar_index - 25, d_high, "STEP 1 · " + bias_txt,
+         color=bias_col, textcolor=color.white, size=size.small,
+         style=label.style_label_lower_right)
+
+if show_weekly and barstate.islast
+    // ── Previous Weekly High
+    line.new(bar_index - 100, prev_w_high, bar_index + extend_bars, prev_w_high,
+         color=color.new(color.orange, 30), width=1, style=line.style_dotted)
+    label.new(bar_index + extend_bars, prev_w_high, " PWH",
+         color=color.new(color.orange, 20), textcolor=color.black,
+         style=label.style_label_left, size=size.tiny)
+
+    // ── Previous Weekly Low
+    line.new(bar_index - 100, prev_w_low, bar_index + extend_bars, prev_w_low,
+         color=color.new(color.orange, 30), width=1, style=line.style_dotted)
+    label.new(bar_index + extend_bars, prev_w_low, " PWL",
+         color=color.new(color.orange, 20), textcolor=color.black,
+         style=label.style_label_left, size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════════════
+//  STEP 2 · 4H WAITING ROOM  (FVG + OB in Discount / Premium)
+// ═══════════════════════════════════════════════════════════════════
+
+// Fair Value Gaps on 4H (3-candle pattern)
+// Bullish FVG : gap between candle[2].high and candle[0].low  →  low[0] > high[2]
+// Bearish FVG : gap between candle[2].low  and candle[0].high →  high[0] < low[2]
+h4_bull_fvg = h4_low  > h4_high_2    // bullish gap
+h4_bear_fvg = h4_high < h4_low_2     // bearish gap
+
+// Order Block on 4H (last opposite candle before impulsive move)
+// Bullish OB: previous candle bearish, current candle strongly bullish
+h4_bull_ob  = h4_close_1 < h4_open_1 and h4_close > h4_open and
+              strong_expansion(h4_open, h4_high, h4_low, h4_close)
+// Bearish OB: previous candle bullish, current candle strongly bearish
+h4_bear_ob  = h4_close_1 > h4_open_1 and h4_close < h4_open and
+              strong_expansion(h4_open, h4_high, h4_low, h4_close)
+
+// Ideal zone: bull FVG in discount, bear FVG in premium
+h4_bull_zone = h4_bull_fvg and is_discount
+h4_bear_zone = h4_bear_fvg and is_premium
+h4_bull_ob_zone = h4_bull_ob and is_discount
+h4_bear_ob_zone = h4_bear_ob and is_premium
+
+// ── Premium / Discount background boxes (once per chart)
+if show_pd_zone and barstate.islast
+    box.new(bar_index - 30, d_low, bar_index, d_eq,
+         bgcolor=color.new(color.green, 88),
+         border_color=color.new(color.green, 60), border_width=1)
+    label.new(bar_index - 15, (d_low + d_eq) / 2,
+         "DISCOUNT ZONE\n(4H Bull FVG / OB here → Longs)",
+         color=color.new(color.green, 30), textcolor=color.white, size=size.small)
+
+    box.new(bar_index - 30, d_eq, bar_index, d_high,
+         bgcolor=color.new(color.red, 88),
+         border_color=color.new(color.red, 60), border_width=1)
+    label.new(bar_index - 15, (d_eq + d_high) / 2,
+         "PREMIUM ZONE\n(4H Bear FVG / OB here → Shorts)",
+         color=color.new(color.red, 30), textcolor=color.white, size=size.small)
+
+// ── Draw 4H FVG boxes when detected
+if show_4h and h4_bull_zone
+    box.new(bar_index - 2, h4_high_2, bar_index + extend_bars, h4_low,
+         bgcolor=color.new(color.aqua, 82), border_color=color.aqua, border_width=1)
+    label.new(bar_index, h4_high_2, "4H BULL FVG\n(Waiting Room – Long)",
+         color=color.new(color.aqua, 15), textcolor=color.black,
+         style=label.style_label_upper_right, size=size.small)
+
+if show_4h and h4_bear_zone
+    box.new(bar_index - 2, h4_high, bar_index + extend_bars, h4_low_2,
+         bgcolor=color.new(color.orange, 82), border_color=color.orange, border_width=1)
+    label.new(bar_index, h4_low_2, "4H BEAR FVG\n(Waiting Room – Short)",
+         color=color.new(color.orange, 15), textcolor=color.black,
+         style=label.style_label_lower_right, size=size.small)
+
+if show_4h and h4_bull_ob_zone
+    box.new(bar_index - 1, h4_low_1, bar_index + extend_bars, h4_high_1,
+         bgcolor=color.new(color.teal, 75), border_color=color.teal, border_width=1)
+    label.new(bar_index, h4_high_1, "4H BULL OB\n(Order Block – Long)",
+         color=color.new(color.teal, 15), textcolor=color.white,
+         style=label.style_label_upper_right, size=size.small)
+
+if show_4h and h4_bear_ob_zone
+    box.new(bar_index - 1, h4_low_1, bar_index + extend_bars, h4_high_1,
+         bgcolor=color.new(color.maroon, 75), border_color=color.maroon, border_width=1)
+    label.new(bar_index, h4_low_1, "4H BEAR OB\n(Order Block – Short)",
+         color=color.new(color.maroon, 15), textcolor=color.white,
+         style=label.style_label_lower_right, size=size.small)
+
+// ═══════════════════════════════════════════════════════════════════
+//  STEP 3 · 1H LIQUIDITY PURGE  (Engineered Liquidity / Stop Hunt)
+// ═══════════════════════════════════════════════════════════════════
+
+// Price sweeps the 1H recent swing high/low then reverses (wick beyond, close inside)
+h1_swept_high = h1_high > h1_swing_h and h1_close < h1_swing_h
+h1_swept_low  = h1_low  < h1_swing_l and h1_close > h1_swing_l
+
+// Track sweep levels for Step 4 stop loss
+var float sl_bull = na   // SL for longs: below 1H swept low
+var float sl_bear = na   // SL for shorts: above 1H swept high
+
+if h1_swept_low
+    sl_bull := h1_swing_l
+
+if h1_swept_high
+    sl_bear := h1_swing_h
+
+if show_1h and h1_swept_high
+    label.new(bar_index, h1_high, "STOP HUNT ↓\nSwept 1H High\n(Fake breakout above)",
+         color=color.new(color.fuchsia, 10), textcolor=color.white,
+         style=label.style_label_down, size=size.normal)
+    line.new(bar_index - 5, h1_swing_h, bar_index + extend_bars, h1_swing_h,
+         color=color.fuchsia, width=2, style=line.style_dashed)
+
+if show_1h and h1_swept_low
+    label.new(bar_index, h1_low, "STOP HUNT ↑\nSwept 1H Low\n(Fake breakout below)",
+         color=color.new(color.fuchsia, 10), textcolor=color.white,
+         style=label.style_label_up, size=size.normal)
+    line.new(bar_index - 5, h1_swing_l, bar_index + extend_bars, h1_swing_l,
+         color=color.fuchsia, width=2, style=line.style_dashed)
+
+// ═══════════════════════════════════════════════════════════════════
+//  STEP 4 · 15M MSS + FVG ENTRY + STOP LOSS
+// ═══════════════════════════════════════════════════════════════════
+
+// Market Structure Shift (MSS): displacement candle closes past most recent swing
+m15_bull_mss = m15_close > m15_swing_h and m15_close > m15_open and
+               is_displaced(m15_open, m15_high, m15_low, m15_close)
+
+m15_bear_mss = m15_close < m15_swing_l and m15_close < m15_open and
+               is_displaced(m15_open, m15_high, m15_low, m15_close)
+
+// 15M Fair Value Gap (formed by MSS displacement candle)
+// Bullish FVG: current low > 2 bars ago high
+m15_bull_fvg = m15_low > m15_high_2
+// Bearish FVG: current high < 2 bars ago low
+m15_bear_fvg = m15_high < m15_low_2
+
+if show_15m and m15_bull_mss
+    label.new(bar_index, m15_low, "MSS ▲  BULL SHIFT\n(15M Displacement Up)",
+         color=color.new(color.lime, 10), textcolor=color.black,
+         style=label.style_label_up, size=size.normal)
+
+if show_15m and m15_bear_mss
+    label.new(bar_index, m15_high, "MSS ▼  BEAR SHIFT\n(15M Displacement Down)",
+         color=color.new(color.red, 10), textcolor=color.white,
+         style=label.style_label_down, size=size.normal)
+
+// ── 15M FVG Entry Zones (limit order zones)
+if show_15m and m15_bull_fvg
+    box.new(bar_index - 2, m15_high_2, bar_index + extend_bars, m15_low,
+         bgcolor=color.new(color.lime, 85), border_color=color.lime, border_width=1)
+    label.new(bar_index, m15_high_2, "ENTRY ZONE ▲\n(Limit Buy @ 15M FVG)",
+         color=color.new(color.lime, 15), textcolor=color.black,
+         style=label.style_label_upper_right, size=size.small)
+
+if show_15m and m15_bear_fvg
+    box.new(bar_index - 2, m15_high, bar_index + extend_bars, m15_low_2,
+         bgcolor=color.new(color.red, 85), border_color=color.red, border_width=1)
+    label.new(bar_index, m15_high, "ENTRY ZONE ▼\n(Limit Sell @ 15M FVG)",
+         color=color.new(color.red, 15), textcolor=color.white,
+         style=label.style_label_lower_right, size=size.small)
+
+// ── Stop Loss lines (based on 1H swept level)
+if show_sl and barstate.islast
+    if not na(sl_bull) and daily_bias_bull
+        line.new(bar_index - 10, sl_bull, bar_index + extend_bars, sl_bull,
+             color=color.new(color.red, 0), width=2, style=line.style_dotted)
+        label.new(bar_index + extend_bars, sl_bull, " SL (below 1H sweep low)",
+             color=color.new(color.red, 10), textcolor=color.white,
+             style=label.style_label_left, size=size.small)
+
+    if not na(sl_bear) and daily_bias_bear
+        line.new(bar_index - 10, sl_bear, bar_index + extend_bars, sl_bear,
+             color=color.new(color.red, 0), width=2, style=line.style_dotted)
+        label.new(bar_index + extend_bars, sl_bear, " SL (above 1H sweep high)",
+             color=color.new(color.red, 10), textcolor=color.white,
+             style=label.style_label_left, size=size.small)
+
+// ═══════════════════════════════════════════════════════════════════
+//  DASHBOARD  (top-right checklist table)
+// ═══════════════════════════════════════════════════════════════════
+
+// Determine overall checklist statuses for the dashboard
+step1_done = daily_bias_bull or daily_bias_bear
+step2_done = h4_bull_zone or h4_bear_zone or h4_bull_ob_zone or h4_bear_ob_zone
+step3_done = h1_swept_high or h1_swept_low
+step4_done = m15_bull_mss or m15_bear_mss
+all_done   = step1_done and step2_done and step3_done and step4_done
+
+if show_dash and barstate.islast
+    var table t = table.new(position.top_right, 3, 10,
+         bgcolor   = color.new(#0d1117, 10),
+         border_color=color.new(color.gray, 60), border_width=1,
+         frame_color =color.new(color.gray, 40), frame_width =2)
+
+    // ── Header row
+    table.cell(t, 0, 0, "D-HLD CHECKLIST",
+         text_color=color.white, text_size=size.normal,
+         bgcolor=color.new(#1f2937, 10), text_halign=text.align_center,
+         text_font_family=font.family_monospace)
+    table.merge_cells(t, 0, 0, 2, 0)
+
+    // ── Column headers
+    table.cell(t, 0, 1, "STEP",   text_color=color.new(color.gray, 0), text_size=size.tiny, bgcolor=color.new(#1f2937, 30))
+    table.cell(t, 1, 1, "DETAIL", text_color=color.new(color.gray, 0), text_size=size.tiny, bgcolor=color.new(#1f2937, 30))
+    table.cell(t, 2, 1, "✓/✗",   text_color=color.new(color.gray, 0), text_size=size.tiny, bgcolor=color.new(#1f2937, 30), text_halign=text.align_center)
+
+    // ── Step 1 – Daily Bias
+    bias_txt   = daily_bias_bull ? "▲ BULL  (Strong expansion up)" :
+                 daily_bias_bear ? "▼ BEAR  (Strong expansion down)" :
+                 "── Wait  (no strong expansion)"
+    bias_col   = daily_bias_bull ? color.lime : daily_bias_bear ? color.red : color.gray
+    step1_mark = step1_done ? "✓" : "⏳"
+    step1_mcol = step1_done ? color.lime : color.gray
+    table.cell(t, 0, 2, "1 · Daily DOL",        text_color=color.white,   text_size=size.small)
+    table.cell(t, 1, 2, bias_txt,               text_color=bias_col,      text_size=size.small)
+    table.cell(t, 2, 2, step1_mark,             text_color=step1_mcol,    text_size=size.small, text_halign=text.align_center)
+
+    // ── Step 2 – 4H Waiting Room
+    zone_txt  = h4_bull_zone    ? "Bull FVG in Discount ▼→▲" :
+                h4_bear_zone    ? "Bear FVG in Premium  ▲→▼" :
+                h4_bull_ob_zone ? "Bull OB in Discount  ▼→▲" :
+                h4_bear_ob_zone ? "Bear OB in Premium   ▲→▼" :
+                "Wait – price not in 4H zone"
+    zone_col  = step2_done ? color.aqua : color.gray
+    step2_mark= step2_done ? "✓" : "⏳"
+    step2_mcol= step2_done ? color.lime : color.gray
+    table.cell(t, 0, 3, "2 · 4H Zone",          text_color=color.white,   text_size=size.small)
+    table.cell(t, 1, 3, zone_txt,               text_color=zone_col,      text_size=size.small)
+    table.cell(t, 2, 3, step2_mark,             text_color=step2_mcol,    text_size=size.small, text_halign=text.align_center)
+
+    // ── Step 3 – 1H Sweep
+    sweep_txt  = h1_swept_high ? "↓ Swept 1H High (stop hunt)" :
+                 h1_swept_low  ? "↑ Swept 1H Low  (stop hunt)" :
+                 "Wait – no 1H sweep yet"
+    sweep_col  = step3_done ? color.fuchsia : color.gray
+    step3_mark = step3_done ? "✓" : "⏳"
+    step3_mcol = step3_done ? color.lime : color.gray
+    table.cell(t, 0, 4, "3 · 1H Sweep",         text_color=color.white,   text_size=size.small)
+    table.cell(t, 1, 4, sweep_txt,              text_color=sweep_col,     text_size=size.small)
+    table.cell(t, 2, 4, step3_mark,             text_color=step3_mcol,    text_size=size.small, text_halign=text.align_center)
+
+    // ── Step 4 – 15M MSS
+    mss_txt   = m15_bull_mss ? "▲ Bull MSS (displacement up)" :
+                m15_bear_mss ? "▼ Bear MSS (displacement dn)" :
+                "Wait – no 15M MSS yet"
+    mss_col   = step4_done ? color.lime : color.gray
+    step4_mark= step4_done ? "✓" : "⏳"
+    step4_mcol= step4_done ? color.lime : color.gray
+    table.cell(t, 0, 5, "4 · 15M MSS",          text_color=color.white,   text_size=size.small)
+    table.cell(t, 1, 5, mss_txt,               text_color=mss_col,       text_size=size.small)
+    table.cell(t, 2, 5, step4_mark,            text_color=step4_mcol,    text_size=size.small, text_halign=text.align_center)
+
+    // ── Divider
+    table.cell(t, 0, 6, "─────────────────────────────────────",
+         text_color=color.new(color.gray, 60), text_size=size.tiny)
+    table.merge_cells(t, 0, 6, 2, 6)
+
+    // ── Entry status
+    ready_txt = all_done ?
+         "✅  ALL STEPS ALIGNED  —  TRADE READY" :
+         "⏳  Waiting for checklist alignment..."
+    ready_col = all_done ? color.lime : color.orange
+    table.cell(t, 0, 7, ready_txt,
+         text_color=ready_col, text_size=size.small, text_halign=text.align_center,
+         bgcolor=all_done ? color.new(color.lime, 88) : color.new(color.orange, 90))
+    table.merge_cells(t, 0, 7, 2, 7)
+
+    // ── Target
+    tgt_txt = daily_bias_bull ? "🎯 Target → PDH / PWH  (Draw on Liquidity)" :
+              daily_bias_bear ? "🎯 Target → PDL / PWL  (Draw on Liquidity)" :
+              "🎯 Target → undefined until bias forms"
+    table.cell(t, 0, 8, tgt_txt,
+         text_color=color.yellow, text_size=size.small, text_halign=text.align_center)
+    table.merge_cells(t, 0, 8, 2, 8)
+
+    // ── Zone position
+    zone_pos = is_premium ? "▲ PREMIUM  (seek shorts)" :
+               is_discount ? "▼ DISCOUNT  (seek longs)" : "↔ AT EQUILIBRIUM"
+    zone_pos_col = is_premium ? color.red : is_discount ? color.lime : color.gray
+    table.cell(t, 0, 9, "Price: " + zone_pos,
+         text_color=zone_pos_col, text_size=size.tiny, text_halign=text.align_center)
+    table.merge_cells(t, 0, 9, 2, 9)
